@@ -1,0 +1,92 @@
+{
+    "models": [
+        {
+            "name": "en-us",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+        },
+        {
+            "name": "en-in",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-en-in-0.4.zip"
+        },
+        {
+            "name": "cn",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip"
+        },
+        {
+            "name": "ru",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
+        },
+        {
+            "name": "fr",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip"
+        },
+        {
+            "name": "de",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-de-0.15.zip"
+        },
+        {
+            "name": "es",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"
+        },
+        {
+            "name": "pt",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip"
+        },
+        {
+            "name": "tr",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-tr-0.3.zip"
+        },
+        {
+            "name": "vn",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-vn-0.3.zip"
+        },
+        {
+            "name": "it",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-it-0.22.zip"
+        },
+        {
+            "name": "nl",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-nl-0.22.zip"
+        },
+        {
+            "name": "ca",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-ca-0.4.zip"
+        },
+        {
+            "name": "fa",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.5.zip"
+        },
+        {
+            "name": "uk",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-uk-v3-nano.zip"
+        },
+        {
+            "name": "kz",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-kz-0.15.zip"
+        },
+        {
+            "name": "sv",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-sv-rhasspy-0.15.zip"
+        },
+        {
+            "name": "ja",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-ja-0.22.zip"
+        },
+        {
+            "name": "eo",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-eo-0.42.zip"
+        },
+        {
+            "name": "hi",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-hi-0.22.zip"
+        },
+        {
+            "name": "cs",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-cs-0.4-rhasspy.zip"
+        },
+        {
+            "name": "pl",
+            "url": "https://alphacephei.com/vosk/models/vosk-model-small-pl-0.22.zip"
+        }
+    ]
+}

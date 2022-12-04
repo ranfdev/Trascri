@@ -1,0 +1,4 @@
+data/com.ranfdev.Trascri.desktop.in
+data/com.ranfdev.Trascri.appdata.xml.in
+data/com.ranfdev.Trascri.gschema.xml
+src/window.ui

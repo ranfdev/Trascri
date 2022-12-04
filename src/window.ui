@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="Adw" version="1.0"/>
+  <template class="TrascriWindow" parent="AdwApplicationWindow">
+    <property name="default-width">600</property>
+    <property name="default-height">600</property>
+    <child>
+      <object class="GtkStack" id="stack">
+        <property name="transition-type">crossfade</property>
+        <child>
+          <object class="GtkBox" id="model_chooser_view">
+            <property name="orientation">vertical</property>
+            <child>
+              <object class="GtkHeaderBar">
+                <style>
+                  <class name="flat"/>
+                </style>
+              </object>
+            </child>
+            <child>
+              <object class="AdwStatusPage" id="language_chooser">
+                <property name="icon-name">preferences-desktop-font-symbolic</property>
+                <property name="title">Language</property>
+                <property name="description">Choose which transcription model to use.
+A model weights ~50MB.
+                </property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkBox" id="transcriber_view">
+            <property name="orientation">vertical</property>
+            <child>
+              <object class="GtkHeaderBar" id="header_bar">
+              </object>
+            </child>
+            <child>
+              <object class="AdwFlap" id="flap">
+                <property name="orientation">vertical</property>
+                <property name="vexpand">true</property>
+                <property name="flap-position">end</property>
+                <property name="flap">
+                  <object class="GtkListBox">
+                    <property name="margin-top">8</property>
+                    <property name="margin-bottom">8</property>
+                    <property name="margin-start">8</property>
+                    <property name="margin-end">8</property>
+                    <style>
+                      <class name="boxed-list"></class>
+                    </style>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Manage models</property>
+                        <property name="activatable">true</property>
+                        <signal name="activated" handler="open_model_chooser" swapped="yes"/>
+                        <child>
+                          <object class="GtkImage">
+                            <property name="icon_name">go-next-symbolic</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwComboRow" id="device_drop_down">
+                        <property name="title">Input</property>
+                        <property name="title-lines">1</property>
+                      </object>
+                    </child>
+                  </object>
+                </property>
+                <property name="content">
+                  <object class="GtkScrolledWindow">
+                    <child>
+                      <object class="GtkTextView" id="text_view">
+                        <property name="vexpand">true</property>
+                        <property name="vexpand">true</property>
+                        <property name="wrap-mode">word-char</property>
+                        <property name="top-margin">8</property>
+                        <property name="bottom-margin">8</property>
+                        <property name="left-margin">8</property>
+                        <property name="right-margin">8</property>
+                      </object>
+                    </child>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkBox" id="bottom_bar">
+                <property name="spacing">8</property>
+                <property name="margin-top">8</property>
+                <property name="margin-bottom">8</property>
+                <property name="margin-start">8</property>
+                <property name="margin-end">8</property>
+                <child>
+                  <object class="GtkButton" id="settings_btn">
+                    <style>
+                      <class name="pill"/>
+                      <class name="flat"/>
+                    </style>
+                    <signal name="clicked" handler="handle_settings_btn_clicked" swapped="yes"/>
+                    <property name="icon-name">preferences-system-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="record_btn">
+                    <style>
+                      <class name="suggested-action"/>
+                      <class name="pill"/>
+                    </style>
+                    <signal name="clicked" handler="handle_record_btn_clicked" swapped="yes"/>
+                    <property name="label">Start</property>
+                    <property name="halign">center</property>
+                    <property name="hexpand">true</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton">
+                    <style>
+                      <class name="pill"/>
+                      <class name="flat"/>
+                    </style>
+                    <property name="icon-name">open-menu-symbolic</property>
+                    <property name="menu-model">primary_menu</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+  <menu id="primary_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">_Preferences</attribute>
+        <attribute name="action">app.preferences</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Keyboard Shortcuts</attribute>
+        <attribute name="action">win.show-help-overlay</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_About Trascri</attribute>
+        <attribute name="action">app.about</attribute>
+      </item>
+    </section>
+  </menu>
+</interface>
+

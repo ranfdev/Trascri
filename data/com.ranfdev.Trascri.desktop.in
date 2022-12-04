@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=trascri
+Exec=trascri
+Icon=com.ranfdev.Trascri
+Terminal=false
+Type=Application
+Categories=GTK;
+StartupNotify=true

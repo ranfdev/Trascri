@@ -1,0 +1,78 @@
+{
+    "app-id" : "com.ranfdev.Trascri",
+    "runtime" : "org.gnome.Platform",
+    "runtime-version" : "master",
+    "sdk" : "org.gnome.Sdk",
+    "sdk-extensions" : [
+        "org.freedesktop.Sdk.Extension.rust-stable",
+        "org.freedesktop.Sdk.Extension.llvm14"
+    ],
+    "command" : "trascri",
+    "finish-args" : [
+    	"--share=network",
+    	"--device=all",
+        "--filesystem=xdg-videos",
+        "--socket=fallback-x11",
+        "--socket=pulseaudio",
+        "--socket=wayland",
+        "--talk-name=org.gnome.Shell",
+        "--talk-name=org.freedesktop.FileManager1",
+        "--env=RUST_BACKTRACE=1",
+        "--env=G_MESSAGES_DEBUG=none"
+    ],
+    "build-options" : {
+        "append-path" : "/usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm14/bin",
+        "build-args" : [
+            "--share=network"
+        ],
+        "env" : {
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER" : "clang",
+            "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER" : "clang",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS" : "-C link-arg=-fuse-ld=/usr/lib/sdk/rust-stable/bin/mold",
+            "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS" : "-C link-arg=-fuse-ld=/usr/lib/sdk/rust-stable/bin/mold",
+            "RUST_LOG" : "trascri=debug",
+            "RUST_BACKTRACE" : "1",
+            "LIBRARY_PATH" : "/app/lib/"
+        }
+    },
+    "cleanup" : [
+        "/include",
+        "/lib/pkgconfig",
+        "/man",
+        "/share/doc",
+        "/share/gtk-doc",
+        "/share/man",
+        "/share/pkgconfig",
+        "*.la",
+        "*.a"
+    ],
+    "modules" : [
+    	{
+	    "name": "vosk",
+	    "ensure-writable": ["/lib/libvosk.so"],
+	    "buildsystem" : "simple",
+	    "build-commands" : [
+		"install -Dm644 libvosk.so /app/lib/libvosk.so"
+            ],
+	    "sources" : [
+	    	{
+	    	    "type" : "archive",
+	    	    "url" : "https://github.com/alphacep/vosk-api/releases/download/v0.3.43/vosk-linux-x86_64-0.3.43.zip",
+	    	    "sha256" : "75a92b73507df4f7fa0746d16f9ba9266ad6656fdf02aab3c6d1e91aa7bb9803"
+		}
+	    ]
+	},
+        {
+            "name" : "trascri",
+            "builddir" : true,
+            "buildsystem" : "meson",
+            "sources" : [
+                {
+                    "type" : "git",
+                    "url" : "file:///home/lollo/Importante/Progetti"
+
+                }
+            ]
+        }
+    ]
+}

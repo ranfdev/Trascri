@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
-gtk = { version = "0.5.0", package = "gtk4", features = ["v4_6"] }
+gtk = { version = "0.5.0", package = "gtk4", features = ["v4_8"] }
 vosk = "0.2.0"
 ashpd = "0.3.2"
 gst = { version = "0.19", package = "gstreamer" }
@@ -19,6 +19,7 @@ serde_json = "1.0.89"
 ureq = "2.5.0"
 cap-std = "1.0.1"
 zip = "0.6.3"
+postage = "0.5.0"
 
 [dependencies.adw]
 package = "libadwaita"

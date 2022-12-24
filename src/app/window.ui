@@ -9,6 +9,27 @@
       <object class="GtkStack" id="stack">
         <property name="transition-type">crossfade</property>
         <child>
+          <object class="GtkOverlay" id="subtitle_mode_view">
+            <child type="overlay">
+              <object class="GtkHeaderBar" id="subtitle_mode_headerbar">
+                <property name="title-widget"><object class="AdwBin"></object></property>
+                <property name="show-title-buttons">false</property>
+                <property name="valign">start</property>
+                <child type="end">
+                  <object class="GtkMenuButton">
+                    <style>
+                      <class name="flat"/>
+                    </style>
+                    <property name="icon-name">open-menu-symbolic</property>
+                    <property name="menu-model">subtitle_mode_menu</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+
+          </object>
+        </child>
+        <child>
           <object class="GtkBox" id="model_chooser_view">
             <property name="orientation">vertical</property>
             <child>
@@ -68,10 +89,23 @@ A model weights ~50MB.
                         <property name="title-lines">1</property>
                       </object>
                     </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Audio Activity (RMS)</property>
+                        <property name="title-lines">1</property>
+                        <child>
+                          <object class="GtkLabel" id="rms">
+                            <style>
+                              <class name="numeric"/>
+                            </style>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
                   </object>
                 </property>
                 <property name="content">
-                  <object class="GtkScrolledWindow">
+                  <object class="GtkScrolledWindow" id="scrolled_win">
                     <child>
                       <object class="GtkTextView" id="text_view">
                         <property name="vexpand">true</property>
@@ -83,7 +117,7 @@ A model weights ~50MB.
                         <property name="right-margin">8</property>
                       </object>
                     </child>
-                  </object>
+                 </object>
                 </property>
               </object>
             </child>
@@ -136,6 +170,12 @@ A model weights ~50MB.
   <menu id="primary_menu">
     <section>
       <item>
+        <attribute name="label" translatable="yes">_Subtitle mode</attribute>
+        <attribute name="action">win.activate-subtitle-mode</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
         <attribute name="label" translatable="yes">_Preferences</attribute>
         <attribute name="action">app.preferences</attribute>
       </item>
@@ -149,5 +189,13 @@ A model weights ~50MB.
       </item>
     </section>
   </menu>
+  <menu id="subtitle_mode_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">_Subtitle mode</attribute>
+        <attribute name="action">win.disable-subtitle-mode</attribute>
+      </item>
+    </section>
+  </menu>>
 </interface>
 

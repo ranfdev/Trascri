@@ -8,7 +8,7 @@ use cap_std::fs as cap_fs;
 use gtk::glib;
 use serde::{Deserialize, Serialize};
 
-const MODELS_DEF: &str = include_str!("./models.json");
+const MODELS_DEF: &str = include_str!("../../data/models.json");
 
 #[derive(Clone)]
 pub struct ModelsRepo {

@@ -19,20 +19,15 @@
  */
 
 mod adapters;
-mod application;
+mod app;
 mod config;
-mod models_repo;
 mod ports;
-mod transcriber;
-mod window;
 
+use app::{TrascriApplication, TrascriWindow};
 use config::{GETTEXT_PACKAGE, LOCALEDIR, PKGDATADIR};
 use gettextrs::{bind_textdomain_codeset, bindtextdomain, textdomain};
 use gtk::gio;
 use gtk::prelude::*;
-
-use self::application::TrascriApplication;
-use self::window::TrascriWindow;
 
 fn main() {
     // Set up gettext translations

@@ -2,7 +2,8 @@ pkgdatadir = join_paths(get_option('prefix'), get_option('datadir'), meson.proje
 gnome = import('gnome')
 
 gnome.compile_resources('trascri',
-  'trascri.gresource.xml',
+  'app/trascri.gresource.xml',
+  source_dir: 'app',
   gresource_bundle: true,
   install: true,
   install_dir: pkgdatadir,

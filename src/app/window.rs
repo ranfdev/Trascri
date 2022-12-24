@@ -18,20 +18,22 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
+use futures::prelude::*;
 use glib::clone;
 use gst::prelude::DeviceExt;
-use gtk::{gio, glib, CompositeTemplate};
+use gtk::{gdk, gio, glib, CompositeTemplate};
+use postage::mpsc;
+use postage::prelude::{Stream, *};
 
-use crate::models_repo::{ModelsRepo, RemoteModel};
+use crate::adapters::models_repo::{ModelsRepo, RemoteModel};
+use crate::app::transcriber::*;
 use crate::ports::*;
-use crate::transcriber::*;
-use crate::transcriber::Msg;
 
 const SAMPLE_RATE: i32 = 16000;
 
@@ -44,6 +46,12 @@ mod imp {
         // Template widgets
         #[template_child]
         pub header_bar: TemplateChild<gtk::HeaderBar>,
+        #[template_child]
+        pub bottom_bar: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub scrolled_win: TemplateChild<gtk::ScrolledWindow>,
+        #[template_child]
+        pub subtitle_mode_view: TemplateChild<gtk::Overlay>,
         #[template_child]
         pub text_view: TemplateChild<gtk::TextView>,
         #[template_child]
@@ -62,9 +70,14 @@ mod imp {
         pub transcriber_view: TemplateChild<gtk::Box>,
         #[template_child]
         pub model_chooser_view: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub rms: TemplateChild<gtk::Label>,
         pub transcriber: RefCell<Option<TranscriberActor>>,
         pub models_repo: RefCell<Option<ModelsRepo>>,
         pub active_model: RefCell<Option<RemoteModel>>,
+        pub last_result_iter: RefCell<Option<gtk::TextMark>>,
+        pub scroll_animation: RefCell<adw::TimedAnimation>,
+        pub recording: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -76,6 +89,21 @@ mod imp {
         fn class_init(klass: &mut Self::Class) {
             klass.bind_template();
             klass.bind_template_instance_callbacks();
+
+            klass.install_action(
+                "win.activate-subtitle-mode",
+                None,
+                |win, _aname, _atarget| {
+                    win.set_subtitle_mode(true);
+                },
+            );
+            klass.install_action(
+                "win.disable-subtitle-mode",
+                None,
+                |win, _aname, _atarget| {
+                    win.set_subtitle_mode(false);
+                },
+            );
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -99,7 +127,8 @@ glib::wrapper! {
 impl TrascriWindow {
     fn setup_language_chooser(&self, path: PathBuf) {
         let imp = self.imp();
-        imp.models_repo.replace(Some(ModelsRepo::from_path(path.clone())));
+        imp.models_repo
+            .replace(Some(ModelsRepo::from_path(path.clone())));
 
         let Some(ref models_repo) = *imp.models_repo.borrow() else {
             unreachable!("it's set above");
@@ -174,6 +203,7 @@ impl TrascriWindow {
                     imp.active_model.replace(Some(lang.clone()));
                     imp.stack.set_visible_child(&*imp.transcriber_view);
                     obj.setup_transcriber();
+                    obj.handle_selected_input();
                 }
             });
 
@@ -208,23 +238,68 @@ impl TrascriWindow {
 
         let text_view = self.imp().text_view.clone();
         let b = text_view.buffer();
-        match msg {
+
+        let save_mark = || {
+            imp.last_result_iter
+                .replace(Some(b.create_mark(None, &mut b.end_iter(), true)))
+        };
+
+        let animate_to_bottom = move || {
+            let vadj = imp.scrolled_win.vadjustment();
+            let dx = vadj.upper() - vadj.value();
+            let value_to = vadj.upper() - vadj.page_size();
+            let should_update = {
+                let anim = imp.scroll_animation.borrow();
+                dx != 0.0
+                    && anim.value_to() != value_to
+                    && anim.state() != adw::AnimationState::Playing
+            };
+            if should_update {
+                let animation = adw::builders::TimedAnimationBuilder::new()
+                    .value_from(vadj.value())
+                    .value_to(value_to)
+                    .duration(400)
+                    .easing(adw::Easing::EaseOutCubic)
+                    .widget(self)
+                    .target(&adw::PropertyAnimationTarget::new(&vadj, "value"))
+                    .build();
+                animation.play();
+                imp.scroll_animation.replace(animation);
+            }
+        };
+        match dbg!(msg) {
             Msg::PartialResult(s) => {
+                if let Some(ref mut mark) = *imp.last_result_iter.borrow_mut() {
+                    b.delete(&mut b.iter_at_mark(mark), &mut b.end_iter());
+                }
+
                 let mut i = b.end_iter();
                 b.insert(&mut i, &s);
                 b.insert(&mut i, " ");
-            },
+
+                animate_to_bottom();
+            }
             Msg::Result(s) => {
+                if let Some(ref mut mark) = *imp.last_result_iter.borrow_mut() {
+                    b.delete(&mut b.iter_at_mark(mark), &mut b.end_iter());
+                }
                 let mut i = b.end_iter();
                 b.insert(&mut i, &s);
                 b.insert(&mut i, " ");
-            },
+
+                animate_to_bottom();
+
+                save_mark();
+            }
             Msg::Started => {
+                imp.recording.replace(true);
                 imp.record_btn.remove_css_class("suggested-action");
                 imp.record_btn.add_css_class("destructive-action");
                 imp.record_btn.set_label("Stop");
-            },
+                save_mark();
+            }
             Msg::Stopped => {
+                imp.recording.replace(false);
                 imp.record_btn.remove_css_class("destructive-action");
                 imp.record_btn.add_css_class("suggested-action");
                 imp.record_btn.set_label("Start");
@@ -233,10 +308,6 @@ impl TrascriWindow {
     }
     fn setup_transcriber(&self) {
         let imp = self.imp();
-        if let Some(ref transcriber) = *imp.transcriber.borrow() {
-            transcriber.stop();
-        }
-
 
         let (Some(ref active_model), Some(ref models_repo)) = (
             &*imp.active_model.borrow(),
@@ -244,22 +315,36 @@ impl TrascriWindow {
         ) else {
             return;
         };
-        let recognizer = crate::adapters::recognizer::vosk::Vosk::new(
-            models_repo.model_path(active_model).as_path(),
-            SAMPLE_RATE as f32,
-        );
+
         let obj = self.clone();
+
+        let path = models_repo.model_path(active_model).clone();
+
+        let (s, mut r) = mpsc::channel::<f64>(10);
+        let obj = self.clone();
+        glib::MainContext::default().spawn_local(async move {
+            while let Some(msg) = dbg!(r.recv().await) {
+                obj.imp().rms.set_label(&format!("{:.4}", msg));
+            }
+        });
         imp.transcriber.replace(Some(TranscriberActor::new(
-            Box::new(recognizer),
-            move |msg| {
-                obj.handle_transcriber_msg(msg);
+            move || {
+                let recognizer = crate::adapters::recognizer::vosk::Vosk::new(
+                    path.as_path(),
+                    SAMPLE_RATE as f32,
+                );
+                Box::new(recognizer)
             },
+            s,
         )));
+        dbg!("tra");
+
     }
     fn setup_drop_down(&self) {
         let imp = self.imp();
         let drop_down = imp.device_drop_down.clone();
         let item_factory = gtk::SignalListItemFactory::new();
+
         item_factory.connect_setup(|_, list_item| {
             let list_item: &gtk::ListItem = list_item.downcast_ref().unwrap();
             list_item.set_child(Some(
@@ -282,36 +367,119 @@ impl TrascriWindow {
         });
         drop_down.set_factory(Some(&item_factory));
 
-        let obj = self.clone();
-        drop_down.connect_selected_notify(move |dd| {
-            let imp = obj.imp();
-            let Some(device) = dd.selected_item() else {
-                return;
-            };
-            let device: gst::Device = device.downcast().unwrap();
-            let audio_src = crate::adapters::audio_src::pulse::Pulse::from(device);
-            if let Some(ref transcriber) = *imp.transcriber.borrow() {
-                transcriber.set_element(audio_src.make_element());
-            } else {
-                println!("transcriber not ready, input element not changed");
-            }
-        });
-
         drop_down.set_model(Some(
             &crate::adapters::audio_src::pulse::Pulse::list_available(),
         ));
+
+        let obj = self.clone();
+        drop_down.connect_selected_item_notify(move |dd| {
+            obj.handle_selected_input();
+        });
+        // Somehow this first selected item doesn't trigger the item_notify signal, maybe
+        // it's because the selected item is already 0 by default? But checking dropdown.selected_item()
+        // it's None...
+         drop_down.set_selected(0);
+         // Manually handle first selection.
+         self.handle_selected_input();
     }
+    fn handle_selected_input(&self) {
+        let imp = self.imp();
+        dbg!("OK");
+        let Some(device) = imp.device_drop_down.selected_item() else {
+            return;
+        };
+        let device: gst::Device = device.downcast().unwrap();
+        let audio_src = crate::adapters::audio_src::pulse::Pulse::from(device);
+        if let Some(ref transcriber) = *imp.transcriber.borrow() {
+            transcriber.send(InMsg::SetElement(audio_src.make_element()));
+        } else {
+            println!("transcriber not ready, input element not changed");
+        };
+    }
+    fn set_subtitle_mode(&self, active: bool) {
+        let imp = self.imp();
+        imp.stack.set_vhomogeneous(!active);
+
+        if active {
+            imp.stack.set_visible_child(&*imp.subtitle_mode_view);
+            imp.flap.set_content(None::<&gtk::Widget>);
+            imp.scrolled_win.set_vscrollbar_policy(gtk::PolicyType::External);
+            imp.subtitle_mode_view.set_child(Some(&*imp.scrolled_win));
+            self.add_css_class("osd");
+            self.add_css_class("subtitle-mode");
+        } else {
+            imp.stack.set_visible_child(self.main_view());
+            imp.subtitle_mode_view.set_child(None::<&gtk::Widget>);
+            imp.scrolled_win.set_vscrollbar_policy(gtk::PolicyType::Automatic);
+            imp.flap.set_content(Some(&*imp.scrolled_win));
+            self.remove_css_class("osd");
+            self.remove_css_class("subtitle-mode");
+        }
+    }
+    fn main_view(&self) -> &impl IsA<gtk::Widget> {
+        let imp = self.imp();
+        if imp.transcriber.borrow().is_none() {
+            &*imp.model_chooser_view
+        } else {
+            &*imp.transcriber_view
+        }
+    }
+
     #[template_callback]
     fn handle_record_btn_clicked(&self) {
         let imp = self.imp();
         let Some(ref transcriber) = &*imp.transcriber.borrow() else {
             return;
         };
-        if transcriber.state() == gst::State::Playing {
-            transcriber.stop();
+
+        if imp.recording.get() {
+            transcriber.send(InMsg::Stop);
         } else {
-            transcriber.start();
+            let obj = self.clone();
+            let (s, mut r) = mpsc::channel(2);
+            glib::MainContext::default().spawn_local(async move {
+                while let Some(msg) = dbg!(r.recv().await) {
+                    obj.handle_transcriber_msg(msg);
+                }
+            });
+            transcriber.send(InMsg::Start(s));
         }
+    }
+    fn setup_css(&self) {
+        let provider = gtk::CssProvider::new();
+        provider.load_from_data(
+            r"
+window.subtitle-mode {
+    border-radius: 8px;
+}
+.subtitle-mode textview {
+    background: none;
+    color: white;
+    font-size: 2rem;
+    font-weight: bold;
+}
+.subtitle-mode headerbar {
+    background: none;
+    color: white;
+    box-shadow: none;
+}
+.subtitle-mode button {
+  opacity: 0.6;
+}
+.subtitle-mode textview {
+  padding-right: 24px;
+}
+.subtitle-mode:hover button {
+  opacity: 1.0;
+}
+        "
+            .as_bytes(),
+        );
+        gtk::StyleContext::add_provider_for_display(
+            &gdk::Display::default().unwrap(),
+            &provider,
+            800,
+        );
     }
     #[template_callback]
     fn handle_settings_btn_clicked(&self) {
@@ -325,7 +493,9 @@ impl TrascriWindow {
 
         obj.setup_language_chooser(glib::user_data_dir().join("models"));
         obj.setup_drop_down();
-        obj.setup_transcriber();
+
+        obj.setup_css();
+        obj.set_subtitle_mode(false);
         obj
     }
 }

@@ -1,16 +1,12 @@
 // The role of this module is to glue the audio_src and recognizer adapters, run
 // a gst_pipeline in a separate thread and offer a simple interface to communicate with the thread.
 
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use byte_slice_cast::*;
 use gst::element_error;
 use gst::prelude::*;
-use gtk::glib;
-use gtk::glib::MainContext;
 use postage::mpsc::{channel, Receiver, Sender};
 use postage::prelude::*;
 
@@ -113,7 +109,7 @@ fn handle_samples(
 }
 
 pub struct TranscriberActor {
-    chan_in: Sender<InMsg>,
+    pub sender: Sender<InMsg>,
 }
 
 impl TranscriberActor {
@@ -121,45 +117,54 @@ impl TranscriberActor {
         init_recognizer: impl Fn() -> Box<dyn Recognizer<Sample = i16> + Send> + Send + 'static,
         rms_out: Sender<f64>,
     ) -> Self {
-        let chan_in = TranscriberThread::new(init_recognizer, rms_out);
-        Self { chan_in }
+        let (sender, receiver) = channel(8);
+
+        thread::spawn(move || {
+            let mut ts = Transcriber::new(receiver, init_recognizer, rms_out);
+            ts.start_msg_loop();
+        });
+        Self { sender }
     }
-    pub fn send(&self, msg: InMsg) {
-        self.chan_in.clone().blocking_send(msg);
+    pub fn start(&self, update_sender: Sender<Msg>) {
+        self.sender
+            .clone()
+            .blocking_send(InMsg::Start(update_sender))
+            .unwrap();
+    }
+    pub fn stop(&self) {
+        self.sender.clone().blocking_send(InMsg::Stop).unwrap();
+    }
+    pub fn set_element(&self, el: gst::Element) {
+        self.sender
+            .clone()
+            .blocking_send(InMsg::SetElement(el))
+            .unwrap();
     }
 }
 
-pub struct TranscriberThread {
+pub struct Transcriber {
     element: gst::Element,
     recognizer: Arc<Mutex<Box<dyn Recognizer<Sample = i16> + Send>>>,
     pipeline: gst::Pipeline,
-    chan_in: Sender<InMsg>,
-    receiver_in: Receiver<InMsg>,
-    chan_out: Option<Sender<Msg>>,
+    receiver: Receiver<InMsg>,
+    results_out: Option<Sender<Msg>>,
     rms_out: Sender<f64>,
 }
 
-impl TranscriberThread {
+impl Transcriber {
     pub fn new(
+        receiver: Receiver<InMsg>,
         init_recognizer: impl Fn() -> Box<dyn Recognizer<Sample = i16> + Send> + Send + 'static,
         rms_out: Sender<f64>,
-    ) -> Sender<InMsg> {
-        let (sender_in, receiver_in) = channel(1);
-
-        let sender_in_c = sender_in.clone();
-        thread::spawn(move || {
-            let mut this = Self {
-                element: gst::ElementFactory::make_with_name("pulsesrc", None).unwrap(),
-                pipeline: gst::Pipeline::default(),
-                recognizer: Arc::new(Mutex::new(init_recognizer())),
-                chan_in: sender_in_c,
-                receiver_in,
-                chan_out: None,
-                rms_out,
-            };
-            this.start_msg_loop();
-        });
-        sender_in
+    ) -> Self {
+        Self {
+            element: gst::ElementFactory::make_with_name("pulsesrc", None).unwrap(),
+            pipeline: gst::Pipeline::default(),
+            recognizer: Arc::new(Mutex::new(init_recognizer())),
+            receiver,
+            results_out: None,
+            rms_out,
+        }
     }
     fn handle(&mut self, msg: InMsg) {
         dbg!(&msg);
@@ -167,30 +172,29 @@ impl TranscriberThread {
             InMsg::SetElement(el) => {
                 self.element = el;
             }
-            InMsg::Start(sender) => {
+            InMsg::Start(chan) => {
                 self.stop();
-                self.chan_out = Some(sender.clone());
+                self.results_out = Some(chan.clone());
                 self.rebuild_pipeline();
-                self.start_pipeline_loop();
+                self.start_pipeline_loop().unwrap();
             }
             InMsg::Stop => self.stop(),
             InMsg::Reset => {
                 self.recognizer.lock().unwrap().reset();
             }
-            _ => unreachable!("msg not handled in transcriber thread"),
         }
     }
     fn stop(&mut self) {
         self.pipeline.set_state(gst::State::Null).unwrap();
-        self.pipeline.remove(&self.element);
+        self.pipeline.remove(&self.element).unwrap();
         self.recognizer.lock().unwrap().reset();
-        self.chan_out
+        self.results_out
             .take()
             .map(|mut x| x.blocking_send(Msg::Stopped));
     }
     fn start_msg_loop(&mut self) {
         dbg!("Msg loop started");
-        while let Some(msg) = self.receiver_in.blocking_recv() {
+        while let Some(msg) = self.receiver.blocking_recv() {
             self.handle(msg);
         }
         dbg!("Transcriber msg loop ended");
@@ -209,18 +213,22 @@ impl TranscriberThread {
 
         let pipeline = self.pipeline.clone();
 
-        self.chan_out.as_mut().unwrap().blocking_send(Msg::Started);
-        bus.connect_message(None, move |bus, msg| {
+        self.results_out
+            .as_mut()
+            .unwrap()
+            .blocking_send(Msg::Started)
+            .unwrap();
+        bus.connect_message(None, move |_, msg| {
             use gst::MessageView;
 
             match dbg!(msg.view()) {
                 MessageView::Eos(..) => {
                     dbg!("Received Eos");
-                    pipeline.set_state(gst::State::Null);
+                    pipeline.set_state(gst::State::Null).unwrap();
                 }
                 MessageView::Error(err) => {
                     dbg!(err);
-                    pipeline.set_state(gst::State::Null);
+                    pipeline.set_state(gst::State::Null).unwrap();
                 }
                 _ => (),
             }
@@ -239,7 +247,7 @@ impl TranscriberThread {
 
         const CHUNK_SIZE: usize = 1024 * 2;
 
-        let mut sender = self.chan_out.as_mut().unwrap().clone();
+        let mut results_out = self.results_out.as_mut().unwrap().clone();
         let mut rms_out = self.rms_out.clone();
         let mut buf = Vec::from([0i16; CHUNK_SIZE]);
         let rec = self.recognizer.clone();
@@ -254,7 +262,7 @@ impl TranscriberThread {
                     })
                     .sum();
                 let rms = (sum / (samples.len() as f64)).sqrt();
-                rms_out.blocking_send(rms);
+                rms_out.blocking_send(rms).unwrap();
 
                 let mut recognizer = rec.lock().unwrap();
                 let dec_state = recognizer.feed(&buf);
@@ -266,7 +274,7 @@ impl TranscriberThread {
                         .map(|w| w.text)
                         .collect::<Vec<&str>>()
                         .join(" ");
-                    sender.blocking_send(Msg::Result(s)).unwrap();
+                    results_out.blocking_send(Msg::Result(s)).unwrap();
                 } else {
                     let res = recognizer.partial_result().unwrap();
                     let s = res
@@ -275,10 +283,11 @@ impl TranscriberThread {
                         .map(|w| w.text)
                         .collect::<Vec<&str>>()
                         .join(" ");
-                    sender.blocking_send(Msg::PartialResult(s)).unwrap();
+                    results_out.blocking_send(Msg::PartialResult(s)).unwrap();
                 }
                 buf.truncate(0);
             }
-        });
+        })
+        .unwrap();
     }
 }

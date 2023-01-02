@@ -24,12 +24,11 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use futures::prelude::*;
 use glib::clone;
 use gst::prelude::DeviceExt;
 use gtk::{gdk, gio, glib, CompositeTemplate};
 use postage::mpsc;
-use postage::prelude::{Stream, *};
+use postage::prelude::Stream;
 
 use crate::adapters::models_repo::{ModelsRepo, RemoteModel};
 use crate::app::transcriber::*;
@@ -316,8 +315,6 @@ impl TrascriWindow {
             return;
         };
 
-        let obj = self.clone();
-
         let path = models_repo.model_path(active_model).clone();
 
         let (s, mut r) = mpsc::channel::<f64>(10);
@@ -338,7 +335,6 @@ impl TrascriWindow {
             s,
         )));
         dbg!("tra");
-
     }
     fn setup_drop_down(&self) {
         let imp = self.imp();
@@ -372,15 +368,15 @@ impl TrascriWindow {
         ));
 
         let obj = self.clone();
-        drop_down.connect_selected_item_notify(move |dd| {
+        drop_down.connect_selected_item_notify(move |_| {
             obj.handle_selected_input();
         });
         // Somehow this first selected item doesn't trigger the item_notify signal, maybe
         // it's because the selected item is already 0 by default? But checking dropdown.selected_item()
         // it's None...
-         drop_down.set_selected(0);
-         // Manually handle first selection.
-         self.handle_selected_input();
+        drop_down.set_selected(0);
+        // Manually handle first selection.
+        self.handle_selected_input();
     }
     fn handle_selected_input(&self) {
         let imp = self.imp();
@@ -391,7 +387,7 @@ impl TrascriWindow {
         let device: gst::Device = device.downcast().unwrap();
         let audio_src = crate::adapters::audio_src::pulse::Pulse::from(device);
         if let Some(ref transcriber) = *imp.transcriber.borrow() {
-            transcriber.send(InMsg::SetElement(audio_src.make_element()));
+            transcriber.set_element(audio_src.make_element());
         } else {
             println!("transcriber not ready, input element not changed");
         };
@@ -403,14 +399,16 @@ impl TrascriWindow {
         if active {
             imp.stack.set_visible_child(&*imp.subtitle_mode_view);
             imp.flap.set_content(None::<&gtk::Widget>);
-            imp.scrolled_win.set_vscrollbar_policy(gtk::PolicyType::External);
+            imp.scrolled_win
+                .set_vscrollbar_policy(gtk::PolicyType::External);
             imp.subtitle_mode_view.set_child(Some(&*imp.scrolled_win));
             self.add_css_class("osd");
             self.add_css_class("subtitle-mode");
         } else {
             imp.stack.set_visible_child(self.main_view());
             imp.subtitle_mode_view.set_child(None::<&gtk::Widget>);
-            imp.scrolled_win.set_vscrollbar_policy(gtk::PolicyType::Automatic);
+            imp.scrolled_win
+                .set_vscrollbar_policy(gtk::PolicyType::Automatic);
             imp.flap.set_content(Some(&*imp.scrolled_win));
             self.remove_css_class("osd");
             self.remove_css_class("subtitle-mode");
@@ -433,7 +431,7 @@ impl TrascriWindow {
         };
 
         if imp.recording.get() {
-            transcriber.send(InMsg::Stop);
+            transcriber.stop();
         } else {
             let obj = self.clone();
             let (s, mut r) = mpsc::channel(2);
@@ -442,7 +440,7 @@ impl TrascriWindow {
                     obj.handle_transcriber_msg(msg);
                 }
             });
-            transcriber.send(InMsg::Start(s));
+            transcriber.start(s);
         }
     }
     fn setup_css(&self) {

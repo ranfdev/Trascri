@@ -1,5 +1,7 @@
 # Trascri
 
+<img style="max-width=64px" src="https://raw.githubusercontent.com/ranfdev/Trascri/main/data/icons/hicolor/scalable/apps/com.ranfdev.Trascri.svg"></img>
+
 Simple gtk4 app to transcribe audio to text (alias speech-to-text).
 
 # Screenshots
